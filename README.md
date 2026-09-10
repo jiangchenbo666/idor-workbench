@@ -3,23 +3,21 @@
 ## Workflow
 
 ```mermaid
-flowchart TD
-    A[Create Project<br/>target, environment, roles] --> B[Import Evidence<br/>HAR / Collection / cURL / browser recording]
-    B --> C[Generate Test Plan<br/>self access / horizontal IDOR / vertical IDOR / role isolation / unauthenticated]
-    C --> D[AI Plan Review<br/>detect public APIs, noisy endpoints, missing permission boundaries]
-    D --> E{Human Review<br/>adjust plan?}
-    E -- adjust --> C
-    E -- approve --> F[Run Tests<br/>login, get token, replay requests, assert responses]
-    F --> G[Create Findings<br/>only explainable failed cases enter review]
-    G --> H{Manual Triage}
-    H -- false positive --> I[Mark false_positive<br/>close or keep as feedback sample]
-    H -- confirmed --> J[Register Fix Version<br/>waiting_fix]
-    J --> K[Retest]
-    K -- still vulnerable --> J
-    K -- fixed --> L[Close Finding<br/>closed]
+flowchart LR
+    A[Project] --> B[Evidence]
+    B --> C[Test Plan]
+    C --> D[AI Review]
+    D --> E[Run]
+    E --> F[Finding]
+    F --> G{Triage}
+    G -->|false positive| H[Close]
+    G -->|confirmed| I[Fix]
+    I --> J[Retest]
+    J -->|passed| H
+    J -->|failed| I
 
-    M[Run history<br/>manual labels<br/>retest records] -. future RAG evidence .-> D
-    M -. assertion feedback .-> F
+    K[History & Labels] -. improve .-> D
+    K -. tune .-> E
 ```
 
 IDOR Workbench 是一个面向测开和安全测试团队的越权测试工作台。它把项目配置、角色账号、接口导入、浏览器录制、执行计划、业务场景、接口执行、前端拦截检测、AI 审查和报告产物放在同一条可追踪链路里。
