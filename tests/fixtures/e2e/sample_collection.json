@@ -1,0 +1,21 @@
+{
+  "info": {"name": "Codex E2E Collection"},
+  "item": [
+    {
+      "name": "Ready check",
+      "request": {
+        "method": "GET",
+        "url": "http://127.0.0.1:8001/readyz",
+        "header": {"Accept": "application/json"}
+      }
+    },
+    {
+      "name": "Project list",
+      "request": {
+        "method": "GET",
+        "url": "http://127.0.0.1:8001/api/projects?from=collection",
+        "header": {"Accept": "application/json"}
+      }
+    }
+  ]
+}

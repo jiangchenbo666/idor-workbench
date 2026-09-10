@@ -1,0 +1,11 @@
+{
+  "app.title": "IDOR 越权测试工作台",
+  "common.save": "保存项目",
+  "common.refresh": "刷新",
+  "common.newProject": "新建项目",
+  "error.requestFailed": "请求失败，请检查网络或服务日志。",
+  "frontend.failed": "失败",
+  "frontend.error": "错误",
+  "frontend.notActuallyExecuted": "前端拦截检测未真正执行：",
+  "frontend.checkResultHint": "请查看结果提示"
+}

@@ -1,0 +1,3 @@
+ID,title,expected,role
+TC-001,Admin can read health endpoint,HTTP 200 with ok status,admin
+TC-002,Guest cannot mutate project,Mutation should be denied,guest

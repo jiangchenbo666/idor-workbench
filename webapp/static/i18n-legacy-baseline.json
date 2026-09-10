@@ -1,0 +1,10 @@
+{
+  "webapp/static/app.js": {
+    "copy_sha256": "aa475de0bacc236bb6dce0c1c20700e6769f59c690fa6e33f0a7ae5831646717",
+    "copy_tokens": 794
+  },
+  "webapp/static/index.html": {
+    "copy_sha256": "069a37512351247528bce047eb1cc780cb0d44ba32be98a065b75503c6acea7c",
+    "copy_tokens": 439
+  }
+}

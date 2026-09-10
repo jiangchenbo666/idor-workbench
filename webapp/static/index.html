@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IDOR 越权测试工作台</title>
+  <!-- CSS 会在页面绘制前加载，负责布局、颜色、间距、表格、弹窗和表单状态。 -->
+  <link rel="stylesheet" href="/static/styles.css?v=20260807-ai-collapse">
+</head>
+<body>
+  <!-- 左侧导航。每个按钮用 data-step 标记步骤，app.js 监听点击后切换对应页面面板。 -->
+  <aside class="rail">
+    <div class="brand">
+      <span class="modeText">IDOR Workbench</span>
+    </div>
+    <button class="step topLevel active" data-step="history" data-title="历史项目">历史项目</button>
+    <div class="navGroup">
+      <button class="step childStep" data-step="0" data-title="基础配置">1 基础配置</button>
+      <button class="step childStep" data-step="1" data-title="接口导入">2 接口导入</button>
+      <button class="step childStep proOnly" data-step="2" data-title="执行计划">3 执行计划</button>
+      <button class="step childStep" data-step="3" data-title="执行结果">4 执行结果</button>
+    </div>
+  </aside>
+
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <h1>越权测试可视化向导</h1>
+        <p>把 PRD、角色账号、鉴权方式和接口来源整理成可执行测试计划。</p>
+      </div>
+      <div class="topActions">
+        <span id="userStatus">未登录</span>
+        <button id="openAuthModal" type="button">登录 / 注册</button>
+        <span id="currentProject">未保存项目</span>
+        <button id="saveBtn" class="primary">保存项目</button>
+      </div>
+    </header>
+
+    <!-- 历史项目页：app.js 调用 GET /api/projects 后，把项目列表渲染到 #projectRows。 -->
+    <section class="panel visible" data-panel="history">
+      <div class="sectionHead">
+        <h2>历史项目</h2>
+        <label class="inlineControl searchControl">查询
+          <input id="projectSearch" placeholder="项目名称 / 环境 / 模型">
+        </label>
+        <button id="newProject" class="primary" type="button">新建项目</button>
+        <button id="refreshProjects">刷新</button>
+      </div>
+      <p class="hint">登录后仅展示当前账号保存的历史项目。</p>
+      <div class="tableWrap projectTable">
+        <table>
+          <thead>
+            <tr>
+              <th>项目名称</th>
+              <th>环境</th>
+              <th>模型</th>
+              <th>角色</th>
+              <th>接口</th>
+              <th>计划</th>
+              <th>报告</th>
+              <th>更新时间</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="projectRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 基础配置页：collectProject() 会读取这些输入框，并组装成保存到后端的 project JSON。 -->
+    <section class="panel" data-panel="0">
+      <h2>基础配置</h2>
+      <p class="hint">先完成项目、业务依据、账号鉴权和执行前辅助配置；接口清单在下一步单独导入和确认。</p>
+      <div class="configSection">
+        <div class="sectionHead compactHead">
+          <h3>项目信息</h3>
+        </div>
+        <div class="grid two">
+          <label>项目名称<input id="projectName" required placeholder="例如：三权分立越权测试"></label>
+          <label>被测环境地址<input id="baseUrl" type="url" required placeholder="http://10.50.5.3:8800"></label>
+          <label class="proOnly">请求超时（秒）<input id="timeout" type="number" value="10"></label>
+          <label class="proOnly">权限模型
+            <select id="modelType">
+              <option>综合越权检测</option>
+              <option>多账号越权</option>
+              <option>水平越权</option>
+              <option>垂直越权</option>
+              <option>RBAC 多角色</option>
+              <option>多租户/资源归属</option>
+            </select>
+          </label>
+        </div>
+        <label>测试目标<textarea id="goal" placeholder="说明本次测试要覆盖的角色隔离、水平越权、垂直越权和前端拦截目标。"></textarea></label>
+      </div>
+      <div class="aiConfigPanel compactAiPanel proOnly">
+        <div class="sectionHead compactHead">
+          <h3>AI 分析引擎</h3>
+          <span class="hint">优先使用当前账号保存的 OpenAI-compatible API；未配置时仅使用本地规则兜底。</span>
+        </div>
+        <div class="aiConfigActions">
+          <button id="openAiSettings" type="button">接入自定义 API</button>
+          <button id="testAiSettings" type="button">检查 AI 引擎</button>
+          <span id="aiConfigStatus"></span>
+        </div>
+      </div>
+      <div class="configSection">
+        <div class="sectionHead compactHead">
+          <div>
+            <h3>业务依据</h3>
+            <p class="hint">测试用例更适合直接生成执行计划，PRD 可以作为补充上下文。</p>
+          </div>
+        </div>
+        <div class="businessEvidenceGrid">
+          <div class="evidencePane">
+            <h4>提交用例</h4>
+            <p class="hint">建议在用例里写清楚各账号/角色之间的边界、允许访问范围和禁止访问范围。</p>
+            <div class="upload">
+              <input id="testcaseFile" type="file" accept=".xlsx,.xls,.csv">
+              <div id="testcaseSourceList" class="sourceList"></div>
+            </div>
+            <label class="proOnly">测试用例解析摘要<textarea id="testcaseDigest" class="tall" readonly placeholder="上传测试用例后，这里会展示标题、类型和预期摘要。"></textarea></label>
+          </div>
+          <div class="evidencePane">
+            <h4>业务依据</h4>
+            <p class="hint">PRD 非必需，仅用于 AI 理解业务语义、角色职责和接口风险。</p>
+            <div class="upload">
+              <input id="prdFile" type="file" accept=".md,.txt,.json,.yaml,.yml">
+              <div id="prdSourceList" class="sourceList"></div>
+            </div>
+            <label>PRD/业务权限说明<textarea id="prdText" placeholder="可补充业务背景、角色职责、敏感页面和接口访问规则。"></textarea></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="configSection">
+        <div class="sectionHead compactHead">
+          <h3>角色账号与 getToken</h3>
+        </div>
+        <div class="grid two">
+          <label>getToken URL<input id="tokenUrl" placeholder="/api/v1/auth/getToken"></label>
+          <label class="proOnly">Auth Method
+            <select id="authMethod">
+              <option value="json_post">JSON POST</option>
+              <option value="form_post">Form Data (OAuth2)</option>
+              <option value="get_no_password">GET (免密)</option>
+            </select>
+          </label>
+          <label class="proOnly">loginType<input id="loginType" value="WEB"></label>
+          <label class="proOnly">账号字段名<input id="usernameField" value="username" placeholder="username / email / mobile"></label>
+          <label class="proOnly">密码字段名<input id="passwordField" value="password" placeholder="password / passwd"></label>
+          <label class="proOnly">Token 提取路径<input id="tokenPath" value="tokenInfo.accessToken"></label>
+          <label class="proOnly">Token 使用方式
+            <select id="tokenMode">
+              <option>Bearer Authorization</option>
+              <option>Cookie</option>
+              <option>自定义 Header</option>
+            </select>
+          </label>
+        </div>
+        <div class="sectionHead">
+          <h3>角色账号</h3>
+          <button id="addRole">新增角色</button>
+        </div>
+        <div id="roles"></div>
+      </div>
+    </section>
+
+    <!-- 接口导入页：导入结果先进 state.endpoints，再由 renderEndpoints() 渲染成表格。 -->
+    <section class="panel" data-panel="1">
+      <h2>接口采集、补充导入与确认</h2>
+      <div id="roleImportModal" class="modalOverlay" hidden>
+        <div class="roleImportModal" role="dialog" aria-modal="true" aria-labelledby="roleImportTitle">
+          <div class="modalHead">
+            <div>
+              <strong id="roleImportTitle">角色接口导入</strong>
+              <p class="hint" id="roleImportHint"></p>
+            </div>
+            <button id="closeRoleImport" class="iconBtn" type="button" aria-label="关闭角色接口导入" title="关闭">×</button>
+          </div>
+          <div class="importGrid modalImportGrid">
+            <div class="importBox">
+              <h3 class="importTitle">HAR 抓包</h3>
+              <input id="roleHarFile" type="file" accept=".har,.json">
+              <div id="roleHarSourceList" class="sourceList"></div>
+              <button id="roleImportHar">解析到该角色</button>
+            </div>
+            <div class="importBox">
+              <h3 class="importTitle">接口集合</h3>
+              <input id="roleCollectionFile" type="file" accept=".json,.postman_collection">
+              <div id="roleCollectionSourceList" class="sourceList"></div>
+              <button id="roleImportCollection">解析到该角色</button>
+            </div>
+            <div class="importBox wide">
+              <h3 class="importTitle">cURL 粘贴</h3>
+              <textarea id="roleCurlText" placeholder="粘贴该角色在浏览器或接口工具中复制的 cURL 请求"></textarea>
+              <button id="roleImportCurl">解析到该角色</button>
+            </div>
+          </div>
+          <div class="toolbar compactToolbar">
+            <label class="inlineControl searchControl">过滤
+              <input id="roleImportSearch" placeholder="接口路径 / 方法 / 模块">
+            </label>
+            <span id="roleImportStatus" class="aiStatusLine"></span>
+          </div>
+          <div class="tableWrap roleImportTable">
+            <table>
+              <thead><tr><th>方法</th><th>路径</th><th>模块</th><th>初始有权角色</th><th></th></tr></thead>
+              <tbody id="roleImportRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="importHelpModal" class="modalOverlay" hidden>
+        <div class="helpModal" role="dialog" aria-modal="true" aria-labelledby="importHelpTitle">
+          <div class="modalHead">
+            <strong id="importHelpTitle"></strong>
+            <button id="closeImportHelp" class="iconBtn" type="button" aria-label="关闭说明" title="关闭说明">×</button>
+          </div>
+          <p id="importHelpText"></p>
+        </div>
+      </div>
+      <div class="importFlowHead proOnly">
+        <div>
+          <h3>优先从真实浏览器业务流采集</h3>
+          <p class="hint">一次登录和操作可同时沉淀接口、页面 URL、角色观察证据和 HAR；下方文件与手工录入用于补充。</p>
+        </div>
+      </div>
+      <div class="importGrid primaryImportGrid proOnly">
+        <div class="importBox wide">
+          <h3 class="importTitle">Playwright 人工录制</h3>
+          <p class="hint">选择角色后打开真实浏览器。系统会读取当前激活的侧栏菜单并把后续接口归类；登录初始页也会自动识别。请至少进入一次需要覆盖的每个业务菜单，未进入的模块不会产生可录制接口。</p>
+          <label>录制角色<select id="manualRecordRole"></select></label>
+          <div class="inlineActions">
+            <button id="startManualRecording" type="button">开始人工录制</button>
+            <button id="stopManualRecording" type="button" class="ghost" disabled>停止并导入</button>
+          </div>
+          <div id="manualRecordingStatus" class="aiStatusLine"></div>
+        </div>
+      </div>
+      <div class="importFlowHead supplementImportHead">
+        <div>
+          <h3>按角色补充导入</h3>
+          <p class="hint">先选定角色，再导入该角色的 HAR、Postman/Apifox/YApi 集合或 cURL。角色归属会随接口一起保存，作为后续自身权限与角色隔离测试的依据。</p>
+        </div>
+      </div>
+      <div class="roleImportStrip roleImportSupplement" id="roleImportStrip"></div>
+      <div class="importGrid">
+        <div class="importBox">
+          <h3 class="importTitle">HAR 抓包 <button class="helpDot" type="button" data-help="har" aria-label="查看 HAR 抓包说明" title="查看说明">?</button></h3>
+          <input id="harFile" type="file" accept=".har,.json">
+          <div id="harSourceList" class="sourceList"></div>
+          <button id="importHar">解析 HAR</button>
+        </div>
+        <div class="importBox">
+          <h3 class="importTitle">接口集合 <button class="helpDot" type="button" data-help="collection" aria-label="查看接口集合说明" title="查看说明">?</button></h3>
+          <input id="collectionFile" type="file" accept=".json,.postman_collection">
+          <div id="collectionSourceList" class="sourceList"></div>
+          <button id="importCollection">解析 Postman/Apifox/YApi</button>
+        </div>
+        <div class="importBox">
+          <h3 class="importTitle">手工接口 <button class="helpDot" type="button" data-help="manual" aria-label="查看手工接口说明" title="查看说明">?</button></h3>
+          <button id="addEndpoint">新增接口</button>
+        </div>
+        <div class="importBox wide">
+          <h3 class="importTitle">cURL 粘贴 <button class="helpDot" type="button" data-help="curl" aria-label="查看 cURL 粘贴说明" title="查看说明">?</button></h3>
+          <textarea id="curlText" placeholder="粘贴浏览器、Postman 或 curl 命令导出的请求"></textarea>
+          <button id="importCurl">解析 cURL</button>
+        </div>
+      </div>
+      <div class="frontendUrlSupplement proOnly">
+        <div class="sectionHead compactHead">
+         <div>
+           <h3>按角色补充页面 URL 与前端拦截参数</h3>
+            <p class="hint">页面 URL 与接口导入采用同一角色归属逻辑。选择角色后补录页面；同一个 URL 由其他角色再次补录时会合并角色证据。</p>
+         </div>
+       </div>
+        <div class="inlineActions pageRouteEditor">
+          <label>来源角色<select id="pageRouteRole"></select></label>
+          <label class="grow">页面 URL<input id="pageRouteInput" placeholder="/agent、/space/members 或 /#/system/users"></label>
+          <button id="addPageRoute" type="button">补录页面</button>
+        </div>
+        <div class="tableWrap pageRouteTable">
+          <table><thead><tr><th>页面 URL</th><th>有权角色 / 录制角色</th><th>来源</th><th></th></tr></thead><tbody id="pageRouteRows"></tbody></table>
+        </div>
+       <div class="grid two">
+          <label>Token 存储 Key<textarea id="frontendTokenKeys" placeholder="token&#10;accessToken&#10;Authorization"></textarea></label>
+          <label>无权限识别文案<textarea id="frontendDeniedKeywords" placeholder="无权限&#10;没有权限&#10;未授权&#10;权限不足&#10;403"></textarea></label>
+          <label>页面超时（毫秒）<input id="frontendTimeout" type="number" value="8000"></label>
+          <label>加载后等待（毫秒）<input id="frontendWait" type="number" value="1200"></label>
+        </div>
+      </div>
+      <div id="endpointSectionFilters" class="sectionFilterBar"></div>
+      <datalist id="endpointSectionSuggestions"></datalist>
+      <div class="toolbar">
+        <label class="inlineControl searchControl">查询
+          <input id="endpointSearch" placeholder="接口路径 / 名称 / 模块 / 角色 / 页面">
+        </label>
+        <label class="inlineControl">接口每页
+          <select id="endpointPageSize">
+            <option value="auto" selected>自适应</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+      </div>
+      <div class="tableWrap">
+        <table>
+          <thead><tr><th></th><th>名称</th><th>方法</th><th>路径</th><th>模块</th><th>所属索引</th><th>来源</th><th>有权角色</th><th>页面</th><th></th></tr></thead>
+          <tbody id="endpointRows"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button id="prevEndpointPage">上一页</button>
+        <span id="endpointPageInfo">第 1 页</span>
+        <label class="pageJump">跳到
+          <input id="endpointPageJump" type="number" min="1" value="1">
+          页
+        </label>
+        <button id="goEndpointPage">跳转</button>
+        <button id="nextEndpointPage">下一页</button>
+      </div>
+      <div class="scenarioWorkbench proOnly">
+        <div class="sectionHead">
+          <div>
+            <h3>业务场景编排</h3>
+            <p class="hint">在接口池确认后，按业务顺序准备测试数据、提取 ID，再供后续越权测试复用。读操作可执行；写操作仅在明确勾选测试环境许可后执行。</p>
+          </div>
+          <button id="addScenario" type="button">新增场景</button>
+        </div>
+        <div id="scenarios"></div>
+      </div>
+    </section>
+
+    <!-- 执行计划页：后端 _make_plan() 先生成规则计划，/api/ai/analyze-plan 再审查请求列表质量。 -->
+    <section class="panel proOnly" data-panel="2">
+      <h2>Agent 执行计划</h2>
+      <p class="hint">这里展示的是候选执行计划，包含用例导入、未授权、前端拦截等计划项；实际 API 执行条数以“执行与报告”页为准。</p>
+      <div class="planModeGuide">
+        <div><strong>自身权限</strong><span>用被标为“有权角色”的账号访问接口，确认正常业务不会被误拦截。</span></div>
+        <div><strong>角色隔离</strong><span>用未被标为有权的其他已登录角色访问同一接口，确认后端拒绝越权访问。</span></div>
+      </div>
+      <div id="missing" class="notice"></div>
+      <div id="planSummary" class="summary"></div>
+      <div class="toolbar">
+        <button id="makePlan" class="primary">生成计划并 AI 审查</button>
+        <button id="savePlanEdits" type="button">保存计划调整</button>
+        <a id="downloadPlan" class="ghost" href="#">下载计划 JSON</a>
+        <label class="inlineControl searchControl">查询
+          <input id="planSearch" placeholder="类型 / 角色 / 接口 / 页面 / 预期">
+        </label>
+      </div>
+      <div id="planActionStatus" class="aiStatusLine"></div>
+      <div id="aiPlanInsights" class="aiInsights" hidden></div>
+      <div id="planSections" class="planSections"></div>
+      <div class="tableFooter" id="planFooter" style="display:none">
+        <span id="planPageInfo">第 1 页</span>
+        <div class="pager">
+          <button id="prevPlanPage">上一页</button>
+          <label>跳转 <input id="planPageJump" type="number" min="1" value="1"></label>
+          <button id="goPlanPage">Go</button>
+          <button id="nextPlanPage">下一页</button>
+        </div>
+        <label>每页
+          <select id="planPageSizeSel">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <!-- 执行结果页：app.js 在这里渲染接口结果、前端检测、执行历史、对比结果和报告链接。 -->
+    <section class="panel" data-panel="3">
+      <h2>执行与报告</h2>
+      <div class="runActions">
+        <button id="runApi" class="primary">执行 API 测试</button>
+        <button id="runReport">执行并生成 Word 报告</button>
+      </div>
+      <div class="runActions secondaryRunAction">
+        <button id="runFrontend" class="proOnly">执行前端拦截检测</button>
+        <span class="hint">可与 API 测试并行执行，结果分别写入 API 与前端结果。</span>
+      </div>
+      <div id="runNotice" class="notice ok">尚未执行。</div>
+
+      <div id="resultCards" class="resultCards"></div>
+
+      <div class="resultPane active" data-result-pane="api">
+        <div class="sectionHead">
+          <h3>API 测试结果</h3>
+          <span class="resultTime" data-run-time>最新执行：尚未执行</span>
+          <a id="downloadRunResults" class="ghost" href="#" download>下载执行结果 JSON</a>
+          <button id="openAiRunReport" type="button" disabled>查看 AI 分析报告</button>
+        </div>
+        <div id="runSummary" class="summary"></div>
+        <div id="roleStats" class="roleStats"></div>
+        <div class="toolbar">
+          <label class="inlineControl">查询
+            <input id="apiResultSearch" placeholder="角色 / 接口 / 断言 / 失败原因">
+          </label>
+          <label class="inlineControl">状态
+            <select id="apiStatusFilter">
+              <option value="">全部</option>
+              <option value="PASS">PASS</option>
+              <option value="FAIL">FAIL</option>
+              <option value="ERROR">ERROR</option>
+              <option value="SKIP">SKIP</option>
+            </select>
+          </label>
+          <label class="inlineControl">结果每页
+            <select id="runPageSize">
+              <option value="auto" selected>自适应</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+        </div>
+        <div id="aiRunStatus" class="aiStatusLine"></div>
+        <div id="aiRunInsights" class="aiInsights" hidden></div>
+        <div class="reviewBar">
+          <span id="manualReviewCount">已选 0 条人工复核</span>
+          <button id="saveManualReview" type="button">保存复核清单</button>
+          <a id="downloadManualReview" class="ghost" href="#" download>下载复核清单</a>
+          <button id="toggleReviewList" type="button" class="ghost" style="display:none">展开清单</button>
+        </div>
+        <div id="reviewListPanel" class="reviewListPanel" hidden></div>
+        <!-- Vue 独立挂载区：Finding 状态机相关界面不再继续堆进 app.js。 -->
+        <div id="findingReviewApp" class="findingReviewApp"></div>
+        <div class="tableWrap runTableWrap">
+          <table class="runTable">
+            <thead><tr><th>角色</th><th>分组</th><th>状态</th><th>接口</th><th>HTTP</th><th>断言结论</th><th>失败原因</th><th>复核</th></tr></thead>
+            <tbody id="runRows"></tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button id="prevRunPage">上一页</button>
+          <span id="runPageInfo">第 1 页</span>
+          <label class="pageJump">跳到
+            <input id="runPageJump" type="number" min="1" value="1">
+            页
+          </label>
+          <button id="goRunPage">跳转</button>
+          <button id="nextRunPage">下一页</button>
+        </div>
+      </div>
+
+      <div class="resultPane" data-result-pane="roleLog">
+        <div class="sectionHead">
+          <h3>按角色执行日志</h3>
+          <span class="resultTime" data-run-time>最新执行：尚未执行</span>
+          <label class="inlineControl searchControl">查询
+            <input id="roleLogSearch" placeholder="角色 / 接口 / 断言 / 响应摘要">
+          </label>
+          <a id="downloadLogFromRole" class="ghost" href="#" download>下载 API 原始日志</a>
+        </div>
+        <div id="prettyRunLog" class="prettyRunLog roleLogView"></div>
+      </div>
+
+      <div class="resultPane" data-result-pane="scenario">
+        <div class="sectionHead">
+          <h3>业务场景结果</h3>
+          <span class="resultTime" data-run-time>最新执行：尚未执行</span>
+          <a id="downloadScenarioResults" class="ghost" href="#" download>下载场景结果 JSON</a>
+        </div>
+        <div id="scenarioSummary" class="summary compact"></div>
+        <div class="toolbar">
+          <label class="inlineControl">查询
+            <input id="scenarioResultSearch" placeholder="场景 / 步骤 / 角色 / 变量 / 原因">
+          </label>
+          <label class="inlineControl">状态
+            <select id="scenarioStatusFilter">
+              <option value="">全部</option>
+              <option value="PASS">PASS</option>
+              <option value="FAIL">FAIL</option>
+              <option value="SKIPPED">SKIPPED</option>
+            </select>
+          </label>
+        </div>
+        <div class="tableWrap frontendWrap">
+          <table class="runTable">
+            <thead><tr><th>场景</th><th>用途</th><th>角色</th><th>状态</th><th>接口</th><th>HTTP</th><th>提取变量</th><th>原因 / 响应摘要</th></tr></thead>
+            <tbody id="scenarioRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="resultPane" data-result-pane="frontend">
+        <div class="sectionHead">
+          <h3>前端拦截结果</h3>
+          <span class="resultTime" data-run-time>最新执行：尚未执行</span>
+          <a id="downloadFrontendResults" class="ghost" href="#" download>下载前端结果 JSON</a>
+        </div>
+        <div id="frontendSummary" class="summary compact"></div>
+        <div class="toolbar">
+          <label class="inlineControl">查询
+            <input id="frontendResultSearch" placeholder="角色 / 页面 / 结论 / 证据">
+          </label>
+          <label class="inlineControl">状态
+            <select id="frontendStatusFilter">
+              <option value="">全部</option>
+              <option value="PASS">PASS</option>
+              <option value="FAIL">FAIL</option>
+              <option value="ERROR">ERROR</option>
+            </select>
+          </label>
+        </div>
+        <div id="frontendRows" class="frontendResultList"></div>
+      </div>
+
+      <div class="resultPane" data-result-pane="profile">
+        <div class="sectionHead">
+          <h3>断言策略</h3>
+          <span class="resultTime" data-run-time>最新执行：尚未执行</span>
+          <a id="downloadProfile" class="ghost" href="#" download>下载断言策略 JSON</a>
+        </div>
+        <div id="profileCards" class="profileGrid"></div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr><th>策略项</th><th>当前值</th><th>说明</th></tr></thead>
+            <tbody id="profileRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="resultPane" data-result-pane="artifacts">
+        <div class="sectionHead">
+          <h3>报告与产物</h3>
+          <span class="resultTime" data-run-time>最新执行：尚未执行</span>
+          <a id="downloadReport" class="ghost" href="#" download>下载 Word 报告</a>
+        </div>
+        <div class="artifactGrid">
+          <a id="downloadConfig" class="artifactLink" href="#" download>
+            <strong>生成配置</strong><span>generated_config.py</span>
+          </a>
+          <a id="downloadPlanResult" class="artifactLink" href="#" download>
+            <strong>执行计划</strong><span>test_plan.json</span>
+          </a>
+          <a id="downloadLog" class="artifactLink" href="#" download>
+            <strong>API 原始日志</strong><span>last_run.log</span>
+          </a>
+          <a id="downloadFrontendLog" class="artifactLink" href="#" download>
+            <strong>前端原始日志</strong><span>last_frontend_run.log</span>
+          </a>
+          <a id="downloadScenarioArtifact" class="artifactLink" href="#" download>
+            <strong>业务场景结果</strong><span>scenario_results.json</span>
+          </a>
+        </div>
+        <details class="rawLog" open>
+          <summary>查看终端原始输出</summary>
+          <pre id="runLog"></pre>
+        </details>
+      </div>
+
+      <div class="resultPane" data-result-pane="history">
+        <div class="sectionHead">
+          <h3>执行历史</h3>
+          <span class="resultTime" data-run-time>最新执行：尚未执行</span>
+          <button id="refreshRunHistory" type="button">刷新历史</button>
+        </div>
+        <div class="toolbar">
+          <label class="inlineControl searchControl">查询
+            <input id="runHistorySearch" placeholder="时间 / 环境 / 状态 / 角色">
+          </label>
+        </div>
+        <div class="tableWrap">
+          <table class="runTable historyTable">
+            <thead><tr><th>选择</th><th>时间</th><th>结果</th><th>备注</th><th>操作</th></tr></thead>
+            <tbody id="runHistoryRows"></tbody>
+          </table>
+        </div>
+        <div class="compareHeader">
+          <h4>左右对比</h4>
+          <button id="toggleCompareDiff" type="button">只看差异接口</button>
+        </div>
+        <div class="compareGrid">
+          <div class="comparePane">
+            <h4>当前执行结果（固定左侧）</h4>
+            <label class="compareSearch">模糊搜索当前结果
+              <input id="compareLeftSearch" placeholder="角色 / 接口 / 状态 / 断言">
+            </label>
+            <div id="compareLeft" class="compareBox">当前项目尚未加载执行结果。</div>
+          </div>
+          <div class="comparePane">
+            <h4>历史执行结果（右侧选择）</h4>
+            <label class="compareSearch">模糊搜索历史结果
+              <input id="compareRightSearch" placeholder="角色 / 接口 / 状态 / 断言">
+            </label>
+            <div id="compareRight" class="compareBox">请在上方选择一条历史记录。</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section class="assistantBox">
+    <div class="assistantPane">
+      <h2>操作记录</h2>
+      <div id="chat" class="recordBox"></div>
+    </div>
+    <div class="assistantPane">
+      <h2>工具执行情况</h2>
+      <div id="toolLog" class="recordBox"></div>
+    </div>
+  </section>
+
+  <div id="unsavedModal" class="modalOverlay" hidden>
+    <div class="confirmModal" role="dialog" aria-modal="true" aria-labelledby="unsavedTitle">
+      <div class="modalHead">
+        <strong id="unsavedTitle">当前配置未保存</strong>
+      </div>
+      <div class="confirmBody">
+        <p>是否保存当前修改后再切换页面？</p>
+        <p class="hint">确认：保存并进入下一页。取消：不保存，直接进入下一页。</p>
+      </div>
+      <div class="confirmActions">
+        <button id="discardStepChange" type="button">取消</button>
+        <button id="confirmSaveStepChange" class="primary" type="button">确认保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="resultDetailModal" class="modalOverlay" hidden>
+    <div class="largeModal" role="dialog" aria-modal="true" aria-labelledby="resultDetailTitle">
+      <div class="modalHead">
+        <strong id="resultDetailTitle">接口复测详情</strong>
+        <button id="closeResultDetail" class="iconBtn" type="button" aria-label="关闭" title="关闭">×</button>
+      </div>
+      <div id="resultDetailBody" class="modalBody"></div>
+    </div>
+  </div>
+
+  <div id="aiRunReportModal" class="modalOverlay" hidden>
+    <div class="largeModal" role="dialog" aria-modal="true" aria-labelledby="aiRunReportTitle">
+      <div class="modalHead">
+        <strong id="aiRunReportTitle">AI 执行结果分析</strong>
+        <button id="closeAiRunReport" class="iconBtn" type="button" aria-label="关闭" title="关闭">×</button>
+      </div>
+      <div id="aiRunReportBody" class="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- JS 最后加载，确保 app.js 绑定事件时，所有带 id 的 DOM 节点都已经存在。 -->
+
+
+
+  <div id="authModal" class="modalOverlay" hidden>
+    <div class="confirmModal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <div class="modalHead">
+        <strong id="authTitle">内网账号登录 / 注册</strong>
+        <button id="closeAuthModal" class="iconBtn" type="button" aria-label="关闭" title="关闭">×</button>
+      </div>
+      <div class="modalBody">
+        <label>账号<input id="authUsername" autocomplete="username" placeholder="例如：admin"></label>
+        <label class="pwdLabel">密码<div class="pwdRow"><input id="authPassword" type="password" autocomplete="current-password" placeholder="内网自用，至少 4 位"><button class="eyeToggle" type="button" data-target="authPassword" title="显示/隐藏密码">👁</button></div></label>
+        <label class="pwdLabel">确认密码<div class="pwdRow"><input id="authConfirmPassword" type="password" autocomplete="new-password" placeholder="再输入一次密码"><button class="eyeToggle" type="button" data-target="authConfirmPassword" title="显示/隐藏密码">👁</button></div></label>
+        <p id="authStatus" class="hint"></p>
+      </div>
+      <div class="confirmActions">
+        <button id="loginBtn" class="primary" type="button">登录</button>
+        <button id="registerBtn" type="button">注册</button>
+        <button id="logoutBtn" type="button">退出登录</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="aiSettingsModal" class="modalOverlay" hidden>
+    <div class="largeModal" role="dialog" aria-modal="true" aria-labelledby="aiSettingsTitle">
+      <div class="modalHead">
+        <strong id="aiSettingsTitle">接入自定义 AI API</strong>
+        <button id="closeAiSettings" class="iconBtn" type="button" aria-label="关闭" title="关闭">×</button>
+      </div>
+      <div class="modalBody">
+        <p class="hint">配置会保存到当前登录用户下，不写入项目 JSON，不展示完整 API Key。未登录时请先注册/登录。</p>
+        <div class="grid two">
+          <label>供应商<select id="aiProvider"><option value="openai-compatible">OpenAI-compatible API</option><option value="disabled">未配置，仅本地规则</option><option value="ollama">本地 Ollama（手动启用）</option></select></label>
+          <label>模型<input id="aiModel" placeholder="deepseek-v4 / gpt-4.1-mini / 自定义模型名"></label>
+          <label>Base URL<input id="aiBaseUrl" placeholder="https://.../v1"></label>
+          <label>超时秒数<input id="aiTimeout" type="number" min="10" value="600"></label>
+          <label>Temperature<input id="aiTemperature" type="number" min="0" max="2" step="0.1" value="0.2"></label>
+          <label>API Key<input id="aiApiKey" type="password" autocomplete="off" placeholder="留空表示沿用已保存 key"></label>
+        </div>
+        <p id="customAiStatus" class="hint"></p>
+      </div>
+      <div class="confirmActions">
+        <button id="useServerAi" type="button">清空 AI 设置</button>
+        <button id="testCustomAi" type="button">连通性检测</button>
+        <button id="saveCustomAi" class="primary" type="button">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/i18n.js"></script>
+  <!-- 旧单文件 app.js 已拆为按业务边界加载的脚本，顺序不可调整。 -->
+  <script src="/static/workbench/core.js?v=20260906"></script>
+  <script src="/static/workbench/project.js?v=20260906"></script>
+  <script src="/static/workbench/planning.js?v=20260906"></script>
+  <script src="/static/workbench/execution.js?v=20260906"></script>
+  <script src="/static/workbench/integration.js?v=20260906"></script>
+  <script src="/static/workbench/bootstrap.js?v=20260906"></script>
+  <!-- 本地固定版本，内网环境不依赖 CDN。 -->
+  <script src="/static/vendor/vue.global.prod.js?v=3.5.42"></script>
+  <script src="/static/features/findings-review.js?v=20260906"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["data", ".agents", ".codex"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+"idor_workbench/views/api.py" = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["idor_workbench", "webapp", "tests"]
+check_untyped_defs = true
+disallow_any_generics = false
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[tool.vulture]
+min_confidence = 80
+paths = ["idor_workbench", "webapp", "tests"]

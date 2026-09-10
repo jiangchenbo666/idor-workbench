@@ -1,0 +1,7 @@
+# Local and CI quality gates. Install with: pip install -r requirements-dev.txt
+-r requirements.txt
+# Starlette 1.6+ uses the actively maintained HTTPX2 client for TestClient.
+httpx2>=2.9.1,<3.0
+ruff==0.12.8
+mypy==1.17.1
+vulture==2.14
