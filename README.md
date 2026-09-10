@@ -3,21 +3,23 @@
 ## Workflow
 
 ```mermaid
-flowchart LR
+flowchart TD
     A[Project] --> B[Evidence]
     B --> C[Test Plan]
     C --> D[AI Review]
-    D --> E[Run]
-    E --> F[Finding]
-    F --> G{Triage}
-    G -->|false positive| H[Close]
-    G -->|confirmed| I[Fix]
-    I --> J[Retest]
-    J -->|passed| H
-    J -->|failed| I
+    D --> E{Approve?}
+    E -- adjust --> C
+    E -- yes --> F[Run Tests]
+    F --> G[Findings]
+    G --> H{Triage}
+    H -- false positive --> I[Close / Sample]
+    H -- confirmed --> J[Fix Version]
+    J --> K[Retest]
+    K -- failed --> J
+    K -- passed --> L[Closed]
 
-    K[History & Labels] -. improve .-> D
-    K -. tune .-> E
+    M[History / Labels / Retests] -. RAG evidence .-> D
+    M -. assertion tuning .-> F
 ```
 
 IDOR Workbench 是一个面向测开和安全测试团队的越权测试工作台。它把项目配置、角色账号、接口导入、浏览器录制、执行计划、业务场景、接口执行、前端拦截检测、AI 审查和报告产物放在同一条可追踪链路里。
